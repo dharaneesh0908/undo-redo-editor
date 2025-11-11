@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Undo/Redo Text Editor Using Stacks — Demo Only</title>
+  <meta name="description" content="Interactive Undo/Redo demo using stacks. Report removed." />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121834;
+      --panel-2: #0f1530;
+      --text: #eaf0ff;
+      --muted: #b9c4ffcc;
+      --radius: 18px;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial;
+      background: radial-gradient(1200px 800px at 100% -10%, #2a356e33, transparent 60%),
+                  radial-gradient(1000px 800px at -20% 110%, #2fb3b033, transparent 60%),
+                  var(--bg);
+      color: var(--text);
+    }
+    header { padding: 28px 20px 10px; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 0 16px 40px; }
+    h1 { margin: 0 0 6px; font-size: clamp(26px, 3.2vw, 40px); }
+    .subtitle { color: var(--muted); margin-bottom: 20px; }
+
+    .card {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid #ffffff1a;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      padding: 20px;
+    }
+
+    .controls { display: grid; gap: 12px; margin-bottom: 16px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid #ffffff22;
+      background: #0c1230;
+      color: var(--text);
+      outline: none;
+      box-shadow: inset 0 1px 0 #ffffff0a;
+    }
+    input[type="text"]::placeholder { color: #c8d3ff59; }
+
+    button {
+      appearance: none;
+      border: none;
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      background: linear-gradient(180deg, #2b3aa8, #203083);
+      border: 1px solid #c8d3ff33;
+      box-shadow: 0 6px 14px #00000040, inset 0 1px 0 #ffffff40;
+      transition: transform .04s ease, filter .2s ease;
+    }
+    button:hover { filter: brightness(1.05); }
+    button:active { transform: translateY(1px); }
+    button.secondary { background: #1b234e; }
+    button.success { background: linear-gradient(180deg, #24d39a, #0a9d75); }
+    button.warn { background: linear-gradient(180deg, #ffc164, #e48b28); }
+
+    .kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      padding: 2px 6px; border-radius: 6px; background: #ffffff1a; border: 1px solid #ffffff2d;
+    }
+
+    .status {
+      padding: 14px; border-radius: 12px; background: #0e1638; border: 1px solid #ffffff1a;
+      display: grid; gap: 8px; font-size: 14px; color: var(--muted);
+    }
+    .pill {
+      display: inline-flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 999px;
+      background: #ffffff14; border: 1px solid #ffffff26; font-size: 12px; color: var(--text);
+    }
+
+    .output {
+      min-height: 100px;
+      white-space: pre-wrap; word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      color: #e7ecff; background: #0b1233; border: 1px solid #ffffff1a; border-radius: 12px;
+      padding: 12px 14px; margin-top: 6px;
+    }
+
+    footer { text-align: center; color: var(--muted); padding: 24px 10px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header class="wrap">
+    <h1>Undo/Redo Text Editor Using Stack</h1>
+    <div class="subtitle">Interactive Demo </div>
+  </header>
+
+  <main class="wrap">
+    <section class="card" aria-labelledby="demo-title">
+      <h2 id="demo-title" style="margin:0 0 10px;font-size:18px;">Demo</h2>
+      <div class="controls">
+        <label for="writeInput" style="font-size:13px;">Append text (use a leading space to separate words, e.g., <em> World</em>):</label>
+        <input id="writeInput" type="text" placeholder="Type text to append, then press Enter or click Write" />
+        <div class="row">
+          <button id="btnWrite" title="Append text">Write</button>
+          <button id="btnUndo" class="secondary" title="Undo (Ctrl+Z)">Undo <span class="kbd">Ctrl+Z</span></button>
+          <button id="btnRedo" class="secondary" title="Redo (Ctrl+Y / Ctrl+Shift+Z)">Redo <span class="kbd">Ctrl+Y</span></button>
+          <button id="btnClear" class="warn" title="Reset to empty and clear history">Clear</button>
+          <button id="btnCopy" class="success" title="Copy current text">Copy</button>
+          <button id="btnSave" class="success" title="Download current text to file">Save .txt</button>
+        </div>
+      </div>
+
+      <div class="status" aria-live="polite">
+        <div>
+          <span class="pill" id="pillUndo">Undo stack: 0</span>
+          <span class="pill" id="pillRedo">Redo stack: 0</span>
+        </div>
+        <div><strong>Current Text</strong></div>
+        <div id="currentText" class="output" role="status" aria-atomic="true">(empty)</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>© <span id="yr"></span> Undo/Redo with Stacks — Interactive Demo</footer>
+
+  <script>
+    // ----- Core stack-based editor -----
+    class UndoRedoTextEditor {
+      constructor() {
+        this.text = "";
+        this.undo_stack = [];
+        this.redo_stack = [];
+      }
+      write(new_text) {
+        // ignore non-strings/nulls
+        if (typeof new_text !== "string" || new_text.length === 0) return;
+        this.undo_stack.push(this.text);
+        this.text += new_text;
+        this.redo_stack.length = 0; // clear redo
+      }
+      undo() {
+        if (this.undo_stack.length) {
+          this.redo_stack.push(this.text);
+          this.text = this.undo_stack.pop();
+        }
+      }
+      redo() {
+        if (this.redo_stack.length) {
+          this.undo_stack.push(this.text);
+          this.text = this.redo_stack.pop();
+        }
+      }
+      clearAll() {
+        this.text = "";
+        this.undo_stack.length = 0;
+        this.redo_stack.length = 0;
+      }
+    }
+
+    // ----- UI wiring -----
+    const editor  = new UndoRedoTextEditor();
+    const elInput = document.getElementById('writeInput');
+    const elWrite = document.getElementById('btnWrite');
+    const elUndo  = document.getElementById('btnUndo');
+    const elRedo  = document.getElementById('btnRedo');
+    const elClear = document.getElementById('btnClear');
+    const elCopy  = document.getElementById('btnCopy');
+    const elSave  = document.getElementById('btnSave');
+
+    const elText   = document.getElementById('currentText');
+    const pillUndo = document.getElementById('pillUndo');
+    const pillRedo = document.getElementById('pillRedo');
+
+    function render() {
+      elText.textContent = editor.text || '(empty)';
+      pillUndo.textContent = 'Undo stack: ' + editor.undo_stack.length;
+      pillRedo.textContent = 'Redo stack: ' + editor.redo_stack.length;
+    }
+
+    function writeFromInput() {
+      const v = elInput.value;
+      if (!v) return;
+      editor.write(v);
+      elInput.value = '';
+      render();
+      elInput.focus();
+    }
+
+    elWrite.addEventListener('click', writeFromInput);
+    elInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        writeFromInput();
+      }
+    });
+
+    elUndo.addEventListener('click', () => { editor.undo(); render(); });
+    elRedo.addEventListener('click', () => { editor.redo(); render(); });
+    elClear.addEventListener('click', () => { editor.clearAll(); render(); });
+
+    // Copy with fallback for non-secure contexts
+    elCopy.addEventListener('click', async () => {
+      const txt = editor.text;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(txt);
+        } else {
+          // fallback
+          const ta = document.createElement('textarea');
+          ta.value = txt;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        elCopy.textContent = 'Copied!';
+      } catch (err) {
+        elCopy.textContent = 'Copy failed';
+        console.error(err);
+      } finally {
+        setTimeout(() => elCopy.textContent = 'Copy', 1000);
+      }
+    });
+
+    // Save as .txt
+    elSave.addEventListener('click', () => {
+      const blob = new Blob([editor.text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'editor-text.txt';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    // Keyboard shortcuts: Ctrl/Cmd+Z (undo), Ctrl+Y or Ctrl+Shift+Z (redo)
+    document.addEventListener('keydown', (e) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        editor.undo(); render();
+      } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        editor.redo(); render();
+      }
+    });
+
+    // init
+    render();
+    document.getElementById('yr').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
